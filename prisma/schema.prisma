@@ -95,7 +95,7 @@ model User {
 
   churchId      String?
   church        Church?  @relation(fields: [churchId], references: [id])
-  churchNameAlt String? // used when church isn't in the list
+  churchNameAlt String?
 
   backgroundCheckDate   DateTime?
   backgroundCheckExpiry DateTime?
@@ -149,56 +149,107 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
+// ─── Mods ────────────────────────────────────────────────────────────────────
+// A "Mod" is a physical module/unit inside a specific jail.
+// Douglas and Sarpy each have their own independent mod lists.
+
+model Mod {
+  id        String     @id @default(cuid())
+  name      String     // e.g. "Mod 1", "Mod D", "Mod F"
+  county    UserCounty // DOUGLAS or SARPY (not BOTH)
+  isActive  Boolean    @default(true)
+  sortOrder Int        @default(0)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  visitMods             VisitMod[]
+  recurringScheduleMods RecurringScheduleMod[]
+
+  @@unique([name, county])
+}
+
 // ─── Visits ──────────────────────────────────────────────────────────────────
 
 model RecurringSchedule {
-  id           String     @id @default(cuid())
-  county       UserCounty
-  dayOfWeek    Int // 0 = Sunday … 6 = Saturday
-  startTime    String // e.g. "18:00"
-  endTime      String // e.g. "20:00"
-  location     String
-  description  String?
-  volunteerCap Int        @default(10)
-  isActive     Boolean    @default(true)
-  createdAt    DateTime   @default(now())
+  id          String     @id @default(cuid())
+  county      UserCounty
+  title       String
+  dayOfWeek   Int        // 0 = Sunday … 6 = Saturday
+  startTime   String     // e.g. "18:00"
+  endTime     String     // e.g. "20:00"
+  location    String
+  description String?
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
   visits Visit[]
+  mods   RecurringScheduleMod[]
+}
+
+// Join table: which mods are included in a recurring schedule
+model RecurringScheduleMod {
+  id                  String @id @default(cuid())
+  recurringScheduleId String
+  modId               String
+  maxVolunteers       Int    @default(2)
+
+  recurringSchedule RecurringSchedule @relation(fields: [recurringScheduleId], references: [id], onDelete: Cascade)
+  mod               Mod               @relation(fields: [modId], references: [id])
+
+  @@unique([recurringScheduleId, modId])
 }
 
 model Visit {
-  id         String      @id @default(cuid())
-  county     UserCounty
-  title      String
-  date       DateTime
-  startTime  String
-  endTime    String
-  location   String
-  notes      String?
-  volunteerCap Int       @default(10)
-  status     VisitStatus @default(SCHEDULED)
+  id        String      @id @default(cuid())
+  county    UserCounty
+  title     String
+  date      DateTime
+  startTime String
+  endTime   String
+  location  String
+  notes     String?
+  status    VisitStatus @default(SCHEDULED)
 
   teamLeaderId        String?
-  teamLeader          User?             @relation("TeamLeader", fields: [teamLeaderId], references: [id])
+  teamLeader          User?              @relation("TeamLeader", fields: [teamLeaderId], references: [id])
   recurringScheduleId String?
   recurringSchedule   RecurringSchedule? @relation(fields: [recurringScheduleId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  visitMods VisitMod[]
+  signups   VisitSignup[]
+}
+
+// Which mods are open for a specific visit, and their volunteer cap
+model VisitMod {
+  id            String @id @default(cuid())
+  visitId       String
+  modId         String
+  maxVolunteers Int    @default(2)
+
+  visit   Visit       @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  mod     Mod         @relation(fields: [modId], references: [id])
   signups VisitSignup[]
+
+  @@unique([visitId, modId])
 }
 
 model VisitSignup {
   id         String       @id @default(cuid())
   visitId    String
+  visitModId String       // which mod the volunteer is assigned to
   userId     String
   status     SignupStatus @default(SIGNED_UP)
   signedUpAt DateTime     @default(now())
 
-  visit Visit @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  visit    Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  visitMod VisitMod @relation(fields: [visitModId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // One signup per volunteer per visit (can only be in one mod)
   @@unique([visitId, userId])
 }
 

@@ -13,6 +13,7 @@ import {
   LogOut,
   Menu,
   X,
+  MapPin,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "./ui/button";
@@ -64,8 +65,9 @@ export function Nav({ session }: NavProps) {
 
   const adminLinks = [
     { href: "/admin/volunteers", icon: Users, label: "Volunteers" },
-    { href: "/admin/visits", icon: CalendarDays, label: "Manage Visits" },
-    { href: "/admin/communications", icon: ClipboardList, label: "Communications" },
+    { href: "/admin/visits", icon: CalendarDays, label: "Visits" },
+    { href: "/admin/recurring", icon: ClipboardList, label: "Recurring Schedules" },
+    { href: "/admin/mods", icon: MapPin, label: "Manage Mods" },
   ];
 
   const NavContent = ({ onLinkClick }: { onLinkClick?: () => void }) => (

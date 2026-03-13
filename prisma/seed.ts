@@ -82,6 +82,36 @@ async function main() {
 
   console.log(`Seeded ${churches.length} churches`);
 
+  // ── Douglas County Mods ───────────────────────────────────────────────────
+  const douglasModNames = [
+    "Mod 1", "Mod 2", "Mod 3", "Mod 4", "Mod 5",
+    "Mod 6", "Mod 7", "Mod 8", "Mod 9", "Mod 10",
+    "Mod A", "Mod B", "Mod C", "Mod D", "Mod E",
+  ];
+  for (let i = 0; i < douglasModNames.length; i++) {
+    await prisma.mod.upsert({
+      where: { name_county: { name: douglasModNames[i], county: "DOUGLAS" } },
+      update: {},
+      create: { name: douglasModNames[i], county: "DOUGLAS", sortOrder: i },
+    });
+  }
+  console.log(`Seeded ${douglasModNames.length} Douglas County mods`);
+
+  // ── Sarpy County Mods ─────────────────────────────────────────────────────
+  const sarpyModNames = [
+    "Mod 1", "Mod 2", "Mod 3", "Mod 4",
+    "Mod A", "Mod B", "Mod C",
+    "Mod F", "Mod G", "Mod H",
+  ];
+  for (let i = 0; i < sarpyModNames.length; i++) {
+    await prisma.mod.upsert({
+      where: { name_county: { name: sarpyModNames[i], county: "SARPY" } },
+      update: {},
+      create: { name: sarpyModNames[i], county: "SARPY", sortOrder: i },
+    });
+  }
+  console.log(`Seeded ${sarpyModNames.length} Sarpy County mods`);
+
   // ── Super Admin ───────────────────────────────────────────────────────────
   const adminPassword = await bcrypt.hash("Admin1234!", 12);
   const admin = await prisma.user.upsert({
