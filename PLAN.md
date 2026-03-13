@@ -39,10 +39,16 @@ A Progressive Web App (PWA) to manage volunteers for jail ministry operations at
 ### Core Entities
 
 ```
+Church
+  id, name, city, state
+  contactName, contactPhone, contactEmail
+  createdAt
+
 User
   id, name, email, phone
   role: SUPER_ADMIN | COUNTY_COORDINATOR | TEAM_LEADER | VOLUNTEER
   status: PENDING | APPROVED | REJECTED | INACTIVE
+  churchId (Church) — the church they attend or are sponsored by
   backgroundCheckDate, backgroundCheckExpiry
   county: DOUGLAS | SARPY | BOTH
   notes (admin notes)

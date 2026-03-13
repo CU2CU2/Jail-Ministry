@@ -1,0 +1,220 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  COUNTY_COORDINATOR
+  TEAM_LEADER
+  VOLUNTEER
+}
+
+enum VolunteerStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  INACTIVE
+}
+
+enum UserCounty {
+  DOUGLAS
+  SARPY
+  BOTH
+}
+
+enum VisitStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum SignupStatus {
+  SIGNED_UP
+  ATTENDED
+  NO_SHOW
+  CANCELLED
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+}
+
+enum NotificationType {
+  REMINDER
+  ANNOUNCEMENT
+  APPROVAL
+  REJECTION
+  SCHEDULE_CHANGE
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+// ─── Church ──────────────────────────────────────────────────────────────────
+
+model Church {
+  id           String   @id @default(cuid())
+  name         String
+  city         String   @default("Omaha")
+  state        String   @default("NE")
+  contactName  String?
+  contactPhone String?
+  contactEmail String?
+  createdAt    DateTime @default(now())
+
+  users User[]
+}
+
+// ─── User (NextAuth-compatible) ───────────────────────────────────────────────
+
+model User {
+  id            String          @id @default(cuid())
+  name          String
+  email         String          @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+
+  role   Role            @default(VOLUNTEER)
+  status VolunteerStatus @default(PENDING)
+  county UserCounty?
+
+  phone   String?
+  address String?
+
+  churchId      String?
+  church        Church?  @relation(fields: [churchId], references: [id])
+  churchNameAlt String? // used when church isn't in the list
+
+  backgroundCheckDate   DateTime?
+  backgroundCheckExpiry DateTime?
+  adminNotes            String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  signups       VisitSignup[]
+  ledVisits     Visit[]       @relation("TeamLeader")
+  notifications Notification[]
+}
+
+// ─── NextAuth ─────────────────────────────────────────────────────────────────
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── Visits ──────────────────────────────────────────────────────────────────
+
+model RecurringSchedule {
+  id           String     @id @default(cuid())
+  county       UserCounty
+  dayOfWeek    Int // 0 = Sunday … 6 = Saturday
+  startTime    String // e.g. "18:00"
+  endTime      String // e.g. "20:00"
+  location     String
+  description  String?
+  volunteerCap Int        @default(10)
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+
+  visits Visit[]
+}
+
+model Visit {
+  id         String      @id @default(cuid())
+  county     UserCounty
+  title      String
+  date       DateTime
+  startTime  String
+  endTime    String
+  location   String
+  notes      String?
+  volunteerCap Int       @default(10)
+  status     VisitStatus @default(SCHEDULED)
+
+  teamLeaderId        String?
+  teamLeader          User?             @relation("TeamLeader", fields: [teamLeaderId], references: [id])
+  recurringScheduleId String?
+  recurringSchedule   RecurringSchedule? @relation(fields: [recurringScheduleId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  signups VisitSignup[]
+}
+
+model VisitSignup {
+  id         String       @id @default(cuid())
+  visitId    String
+  userId     String
+  status     SignupStatus @default(SIGNED_UP)
+  signedUpAt DateTime     @default(now())
+
+  visit Visit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([visitId, userId])
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+model Notification {
+  id      String              @id @default(cuid())
+  userId  String
+  channel NotificationChannel
+  type    NotificationType
+  subject String?
+  body    String              @db.Text
+  status  NotificationStatus  @default(PENDING)
+  sentAt  DateTime?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
