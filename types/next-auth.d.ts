@@ -10,4 +10,14 @@ declare module "next-auth" {
       county: UserCounty | null;
     };
   }
+
+}
+
+declare module "next-auth/jwt" {
+  interface JWT {
+    id: string;
+    role: Role;
+    status: VolunteerStatus;
+    county: UserCounty | null;
+  }
 }

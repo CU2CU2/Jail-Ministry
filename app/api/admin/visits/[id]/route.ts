@@ -2,17 +2,19 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { auditLog } from "@/lib/audit";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "COUNTY_COORDINATOR"];
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await auth();
   if (!session?.user || !ADMIN_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const visit = await prisma.visit.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: {
       visitMods: {
         include: {
@@ -47,14 +49,15 @@ const updateSchema = z.object({
   maxVolunteersPerMod: z.number().int().min(1).max(10).optional(),
 });
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await auth();
   if (!session?.user || !ADMIN_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const visit = await prisma.visit.findUnique({ where: { id: params.id } });
+    const visit = await prisma.visit.findUnique({ where: { id } });
     if (!visit) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
 
     if (
@@ -66,24 +69,36 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     }
 
     const body = await req.json();
-    const { modIds, maxVolunteersPerMod, ...rest } = updateSchema.parse(body);
+    const { modIds, maxVolunteersPerMod, teamLeaderId, ...rest } = updateSchema.parse(body);
+
+    // Pre-compute which visitMod IDs have signups (can't use relation filter in deleteMany)
+    let protectedModIds: string[] = [];
+    if (modIds !== undefined) {
+      const modsWithSignups = await prisma.visitMod.findMany({
+        where: { visitId: id, signups: { some: {} } },
+        select: { modId: true },
+      });
+      protectedModIds = modsWithSignups.map((m) => m.modId);
+    }
 
     const updated = await prisma.visit.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         ...rest,
         ...(rest.date ? { date: new Date(rest.date) } : {}),
+        ...(teamLeaderId !== undefined
+          ? { teamLeader: teamLeaderId ? { connect: { id: teamLeaderId } } : { disconnect: true } }
+          : {}),
         ...(modIds !== undefined
           ? {
               visitMods: {
                 // Remove mods that are no longer in the list (only if no signups)
                 deleteMany: {
-                  modId: { notIn: modIds },
-                  signups: { none: {} },
+                  modId: { notIn: [...modIds, ...protectedModIds] },
                 },
                 // Add new mods
                 upsert: modIds.map((modId) => ({
-                  where: { visitId_modId: { visitId: params.id, modId } },
+                  where: { visitId_modId: { visitId: id, modId } },
                   create: { modId, maxVolunteers: maxVolunteersPerMod ?? 2 },
                   update: maxVolunteersPerMod ? { maxVolunteers: maxVolunteersPerMod } : {},
                 })),
@@ -106,17 +121,37 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
 }
 
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await auth();
   if (!session?.user || !ADMIN_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const visit = await prisma.visit.findUnique({ where: { id } });
+  if (!visit) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
+
+  if (
+    session.user.role === "COUNTY_COORDINATOR" &&
+    session.user.county !== "BOTH" &&
+    session.user.county !== visit.county
+  ) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   // Soft cancel instead of hard delete
-  const visit = await prisma.visit.update({
-    where: { id: params.id },
+  const updated = await prisma.visit.update({
+    where: { id },
     data: { status: "CANCELLED" },
   });
 
-  return NextResponse.json(visit);
+  await auditLog({
+    actorId: session.user.id,
+    actorRole: session.user.role,
+    action: "visit.cancel",
+    targetId: id,
+    targetType: "Visit",
+  });
+
+  return NextResponse.json(updated);
 }

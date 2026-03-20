@@ -17,21 +17,30 @@ const updateSchema = z.object({
   maxVolunteersPerMod: z.number().int().min(1).max(10).optional(),
 });
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await auth();
   if (!session?.user || !ADMIN_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const schedule = await prisma.recurringSchedule.findUnique({ where: { id: params.id } });
+    const schedule = await prisma.recurringSchedule.findUnique({ where: { id } });
     if (!schedule) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    if (
+      session.user.role === "COUNTY_COORDINATOR" &&
+      session.user.county !== "BOTH" &&
+      session.user.county !== schedule.county
+    ) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const body = await req.json();
     const { modIds, maxVolunteersPerMod, ...rest } = updateSchema.parse(body);
 
     const updated = await prisma.recurringSchedule.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         ...rest,
         ...(modIds !== undefined
@@ -39,7 +48,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
               mods: {
                 deleteMany: { modId: { notIn: modIds } },
                 upsert: modIds.map((modId) => ({
-                  where: { recurringScheduleId_modId: { recurringScheduleId: params.id, modId } },
+                  where: { recurringScheduleId_modId: { recurringScheduleId: id, modId } },
                   create: { modId, maxVolunteers: maxVolunteersPerMod ?? 2 },
                   update: maxVolunteersPerMod ? { maxVolunteers: maxVolunteersPerMod } : {},
                 })),
@@ -59,14 +68,26 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
 }
 
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await auth();
   if (!session?.user || !ADMIN_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const schedule = await prisma.recurringSchedule.findUnique({ where: { id } });
+  if (!schedule) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  if (
+    session.user.role === "COUNTY_COORDINATOR" &&
+    session.user.county !== "BOTH" &&
+    session.user.county !== schedule.county
+  ) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   await prisma.recurringSchedule.update({
-    where: { id: params.id },
+    where: { id },
     data: { isActive: false },
   });
 

@@ -11,14 +11,15 @@ const updateSchema = z.object({
   sortOrder: z.number().int().optional(),
 });
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await auth();
   if (!session?.user || !ADMIN_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const mod = await prisma.mod.findUnique({ where: { id: params.id } });
+    const mod = await prisma.mod.findUnique({ where: { id } });
     if (!mod) return NextResponse.json({ error: "Mod not found" }, { status: 404 });
 
     if (
@@ -46,7 +47,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     }
 
     const updated = await prisma.mod.update({
-      where: { id: params.id },
+      where: { id },
       data,
     });
 
@@ -59,23 +60,24 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
 }
 
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await auth();
   if (!session?.user || !ADMIN_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const mod = await prisma.mod.findUnique({ where: { id: params.id } });
+  const mod = await prisma.mod.findUnique({ where: { id } });
   if (!mod) return NextResponse.json({ error: "Mod not found" }, { status: 404 });
 
   // Check for existing visit signups referencing this mod
-  const usedCount = await prisma.visitMod.count({ where: { modId: params.id } });
+  const usedCount = await prisma.visitMod.count({ where: { modId: id } });
   if (usedCount > 0) {
     // Soft delete instead
-    await prisma.mod.update({ where: { id: params.id }, data: { isActive: false } });
+    await prisma.mod.update({ where: { id }, data: { isActive: false } });
     return NextResponse.json({ message: "Mod deactivated (has existing visits)." });
   }
 
-  await prisma.mod.delete({ where: { id: params.id } });
+  await prisma.mod.delete({ where: { id } });
   return NextResponse.json({ message: "Mod deleted." });
 }

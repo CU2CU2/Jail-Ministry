@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -26,7 +26,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   ACCOUNT_INACTIVE: "Your account is inactive. Please contact your coordinator.",
 };
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard";
@@ -97,6 +97,11 @@ export default function LoginPage() {
               {...register("password")}
             />
             {errors.password && <p className="text-xs text-red-600">{errors.password.message}</p>}
+            <div className="flex justify-end">
+              <Link href="/forgot-password" className="text-sm text-blue-600 hover:underline">
+                Forgot password?
+              </Link>
+            </div>
           </div>
 
           <Button type="submit" className="w-full" disabled={loading}>
@@ -112,5 +117,13 @@ export default function LoginPage() {
         </p>
       </CardContent>
     </Card>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }

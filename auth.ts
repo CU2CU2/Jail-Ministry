@@ -4,6 +4,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
+import type { Role, VolunteerStatus, UserCounty } from "@prisma/client";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -59,25 +60,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     jwt({ token, user }) {
       if (user) {
-        token.id = user.id;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        token.role = (user as any).role;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        token.status = (user as any).status;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        token.county = (user as any).county;
+        // NextAuth v5: user in the JWT callback is typed as the internal User|AdapterUser
+        // which doesn't carry our custom fields. Cast through unknown to get our fields.
+        const u = user as unknown as { id: string; role: Role; status: VolunteerStatus; county: UserCounty | null };
+        token.id = u.id;
+        token.role = u.role;
+        token.status = u.status;
+        token.county = u.county;
       }
       return token;
     },
     session({ session, token }) {
       if (token && session.user) {
         session.user.id = token.id as string;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (session.user as any).role = token.role;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (session.user as any).status = token.status;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (session.user as any).county = token.county;
+        session.user.role = token.role as Role;
+        session.user.status = token.status as VolunteerStatus;
+        session.user.county = (token.county ?? null) as UserCounty | null;
       }
       return session;
     },

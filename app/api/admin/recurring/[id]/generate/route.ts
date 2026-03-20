@@ -11,7 +11,8 @@ const schema = z.object({
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await auth();
   if (!session?.user || !ADMIN_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -22,10 +23,19 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const { weeksAhead } = schema.parse(body);
 
     const schedule = await prisma.recurringSchedule.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: { mods: true },
     });
     if (!schedule) return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
+
+    if (
+      session.user.role === "COUNTY_COORDINATOR" &&
+      session.user.county !== "BOTH" &&
+      session.user.county !== schedule.county
+    ) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     if (!schedule.isActive) {
       return NextResponse.json({ error: "Schedule is inactive." }, { status: 400 });
     }

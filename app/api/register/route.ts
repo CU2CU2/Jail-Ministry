@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
-import { sendPendingNotificationEmail } from "@/lib/email";
+import { sendPendingNotificationEmail, sendVerificationEmail } from "@/lib/email";
+import { rateLimit } from "@/lib/rateLimit";
 
 const registerSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -16,6 +18,12 @@ const registerSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const ip = req.headers.get("x-forwarded-for") ?? "unknown";
+  const { allowed } = rateLimit(`register:${ip}`, { windowMs: 15 * 60 * 1000, max: 5 });
+  if (!allowed) {
+    return NextResponse.json({ error: "Too many registration attempts. Please try again later." }, { status: 429 });
+  }
+
   try {
     const body = await req.json();
     const data = registerSchema.parse(body);
@@ -54,6 +62,17 @@ export async function POST(req: Request) {
         status: "PENDING",
       },
     });
+
+    // Create email verification token
+    const verificationToken = crypto.randomBytes(32).toString("hex");
+    await prisma.emailVerificationToken.create({
+      data: {
+        userId: user.id,
+        token: verificationToken,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+      },
+    });
+    sendVerificationEmail(user.email, user.name, verificationToken).catch(console.error);
 
     // Notify county coordinator(s) of the new pending volunteer
     const coordinators = await prisma.user.findMany({

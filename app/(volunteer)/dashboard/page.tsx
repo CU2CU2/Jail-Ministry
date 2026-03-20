@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +11,8 @@ export const metadata = { title: "Dashboard — Jail Ministry" };
 
 export default async function DashboardPage() {
   const session = await auth();
-  const userId = session!.user.id;
+  if (!session?.user?.id) redirect("/login");
+  const userId = session.user.id;
 
   // Upcoming visits the volunteer is signed up for
   const upcomingSignups = await prisma.visitSignup.findMany({
@@ -35,7 +37,7 @@ export default async function DashboardPage() {
   });
 
   // Upcoming visits open for sign-up in the volunteer's county
-  const userCounty = session!.user.county;
+  const userCounty = session.user.county;
   const openVisits = await prisma.visit.findMany({
     where: {
       status: "SCHEDULED",
@@ -51,6 +53,7 @@ export default async function DashboardPage() {
     take: 3,
     include: {
       _count: { select: { signups: true } },
+      visitMods: { select: { maxVolunteers: true } },
     },
   });
 
@@ -58,7 +61,7 @@ export default async function DashboardPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">
-          Welcome back, {session!.user.name?.split(" ")[0]}
+          Welcome back, {session.user.name?.split(" ")[0]}
         </h1>
         <p className="text-gray-500 text-sm mt-1">
           {userCounty ? COUNTY_LABELS[userCounty] : "Jail Ministry Volunteer Portal"}
@@ -142,7 +145,8 @@ export default async function DashboardPage() {
           <CardContent>
             <ul className="divide-y">
               {openVisits.map((visit) => {
-                const spotsLeft = visit.volunteerCap - visit._count.signups;
+                const totalCap = visit.visitMods.reduce((sum, vm) => sum + vm.maxVolunteers, 0);
+                const spotsLeft = totalCap - visit._count.signups;
                 return (
                   <li key={visit.id} className="py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                     <div>
