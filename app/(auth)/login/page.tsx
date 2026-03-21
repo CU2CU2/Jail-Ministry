@@ -1,8 +1,8 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { loginAction } from "./actions";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -47,18 +47,13 @@ function LoginForm() {
     setLoading(true);
     setServerError(null);
 
-    try {
-      await signIn("credentials", {
-        email: data.email,
-        password: data.password,
-        redirect: false,
-      });
+    const result = await loginAction(data.email, data.password);
+    if (result.error) {
+      setServerError(ERROR_MESSAGES[result.error] ?? "Invalid email or password.");
+      setLoading(false);
+    } else {
       router.push(callbackUrl);
       router.refresh();
-    } catch (err: unknown) {
-      const code = (err as { type?: string })?.type ?? (err as { cause?: { err?: { message?: string } } })?.cause?.err?.message ?? "CredentialsSignin";
-      setServerError(ERROR_MESSAGES[code] ?? "Invalid email or password.");
-      setLoading(false);
     }
   };
 
