@@ -32,7 +32,7 @@ export default async function VolunteersPage({
   // Super admins see all roles; coordinators only see VOLUNTEER and TEAM_LEADER
   const roleFilter = isSuperAdmin
     ? undefined
-    : { in: ["VOLUNTEER", "TEAM_LEADER"] as const };
+    : { in: ["VOLUNTEER", "TEAM_LEADER"] as ("VOLUNTEER" | "TEAM_LEADER")[] };
 
   // Coordinators are restricted to their county; super admins see all unless filtered
   const countyRestriction =
