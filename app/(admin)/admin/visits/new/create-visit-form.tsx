@@ -55,7 +55,7 @@ export function CreateVisitForm({ douglasMods, sarpyMods, teamLeaders, isSuperAd
       : "";
 
   const [county, setCounty] = useState<"DOUGLAS" | "SARPY" | "">(defaultCounty);
-  const [teamLeaderVal, setTeamLeaderVal] = useState("");
+  const [teamLeaderVal, setTeamLeaderVal] = useState("none");
   const [selectedMods, setSelectedMods] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,7 +99,7 @@ export function CreateVisitForm({ douglasMods, sarpyMods, teamLeaders, isSuperAd
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...data,
-        teamLeaderId: teamLeaderVal || undefined,
+        teamLeaderId: teamLeaderVal === "none" ? undefined : teamLeaderVal,
         modIds: Array.from(selectedMods),
       }),
     });
@@ -264,7 +264,7 @@ export function CreateVisitForm({ douglasMods, sarpyMods, teamLeaders, isSuperAd
                 <SelectValue placeholder="Assign a team leader…" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">— None —</SelectItem>
+                <SelectItem value="none">— None —</SelectItem>
                 {teamLeaders.map((tl) => (
                   <SelectItem key={tl.id} value={tl.id}>
                     {tl.name}
