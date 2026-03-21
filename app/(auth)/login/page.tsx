@@ -47,18 +47,18 @@ function LoginForm() {
     setLoading(true);
     setServerError(null);
 
-    const result = await signIn("credentials", {
-      email: data.email,
-      password: data.password,
-      redirect: false,
-    });
-
-    if (result?.error) {
-      setServerError(ERROR_MESSAGES[result.error] ?? "Invalid email or password.");
-      setLoading(false);
-    } else {
+    try {
+      await signIn("credentials", {
+        email: data.email,
+        password: data.password,
+        redirect: false,
+      });
       router.push(callbackUrl);
       router.refresh();
+    } catch (err: unknown) {
+      const code = (err as { type?: string })?.type ?? (err as { cause?: { err?: { message?: string } } })?.cause?.err?.message ?? "CredentialsSignin";
+      setServerError(ERROR_MESSAGES[code] ?? "Invalid email or password.");
+      setLoading(false);
     }
   };
 
