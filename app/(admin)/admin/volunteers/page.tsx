@@ -8,18 +8,19 @@ export const metadata = { title: "Volunteers — Jail Ministry Admin" };
 export default async function VolunteersPage({
   searchParams,
 }: {
-  searchParams: { status?: string; county?: string; q?: string };
+  searchParams: Promise<{ status?: string; county?: string; q?: string }>;
 }) {
+  const params = await searchParams;
   const session = await auth();
   const isSuperAdmin = session!.user.role === "SUPER_ADMIN";
   const coordinatorCounty = session!.user.county as UserCounty | null;
 
   const validStatuses = ["PENDING", "APPROVED", "REJECTED", "INACTIVE"];
-  const statusFilter = validStatuses.includes(searchParams.status ?? "") ? searchParams.status! : "PENDING";
+  const statusFilter = validStatuses.includes(params.status ?? "") ? params.status! : "PENDING";
 
   // Coordinators cannot view counties outside their own via URL param
   const validCounties = ["DOUGLAS", "SARPY", "BOTH"];
-  const requestedCounty = searchParams.county;
+  const requestedCounty = params.county;
   const countyFilter =
     requestedCounty && validCounties.includes(requestedCounty)
       ? !isSuperAdmin && coordinatorCounty && coordinatorCounty !== "BOTH" && requestedCounty !== coordinatorCounty && requestedCounty !== "BOTH"
@@ -27,7 +28,7 @@ export default async function VolunteersPage({
         : requestedCounty
       : null;
 
-  const query = searchParams.q ?? "";
+  const query = params.q ?? "";
 
   // Super admins see all roles; coordinators only see VOLUNTEER and TEAM_LEADER
   const roleFilter = isSuperAdmin

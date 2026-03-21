@@ -8,14 +8,15 @@ export const metadata = { title: "Visits — Jail Ministry Admin" };
 export default async function AdminVisitsPage({
   searchParams,
 }: {
-  searchParams: { county?: string; status?: string };
+  searchParams: Promise<{ county?: string; status?: string }>;
 }) {
+  const params = await searchParams;
   const session = await auth();
   const isSuperAdmin = session!.user.role === "SUPER_ADMIN";
   const coordinatorCounty = session!.user.county as UserCounty | null;
 
-  const countyFilter = searchParams.county as UserCounty | undefined;
-  const statusFilter = (searchParams.status ?? "SCHEDULED") as "SCHEDULED" | "COMPLETED" | "CANCELLED";
+  const countyFilter = params.county as UserCounty | undefined;
+  const statusFilter = (params.status ?? "SCHEDULED") as "SCHEDULED" | "COMPLETED" | "CANCELLED";
 
   const effectiveCounty = !isSuperAdmin && coordinatorCounty && coordinatorCounty !== "BOTH"
     ? coordinatorCounty
