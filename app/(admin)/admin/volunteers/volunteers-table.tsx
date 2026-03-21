@@ -10,7 +10,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { COUNTY_LABELS, formatDate } from "@/lib/utils";
-import { CheckCircle2, XCircle, Phone, Mail, MapPin, Church as ChurchIcon, UserPlus } from "lucide-react";
+import {
+  CheckCircle2,
+  XCircle,
+  Phone,
+  Mail,
+  MapPin,
+  Church as ChurchIcon,
+  UserPlus,
+  Pencil,
+  KeyRound,
+  Trash2,
+  UserX,
+  UserCheck,
+} from "lucide-react";
 
 type VolunteerWithChurch = User & { church: Church | null };
 
@@ -26,6 +39,8 @@ interface Props {
   currentStatus: string;
   isSuperAdmin: boolean;
 }
+
+// ─── ActionModal (approve/reject) ────────────────────────────────────────────
 
 interface ActionModalProps {
   volunteer: VolunteerWithChurch;
@@ -138,6 +153,8 @@ function ActionModal({ volunteer, action, onClose, onSuccess }: ActionModalProps
     </div>
   );
 }
+
+// ─── AddUserModal ─────────────────────────────────────────────────────────────
 
 interface AddUserModalProps {
   isSuperAdmin: boolean;
@@ -364,14 +381,377 @@ function AddUserModal({ isSuperAdmin, onClose, onSuccess }: AddUserModalProps) {
   );
 }
 
+// ─── EditUserModal ────────────────────────────────────────────────────────────
+
+interface EditUserModalProps {
+  volunteer: VolunteerWithChurch;
+  isSuperAdmin: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function EditUserModal({ volunteer, isSuperAdmin, onClose, onSuccess }: EditUserModalProps) {
+  const [churches, setChurches] = useState<Church[]>([]);
+  const [form, setForm] = useState({
+    name: volunteer.name,
+    email: volunteer.email,
+    role: volunteer.role as string,
+    status: volunteer.status as string,
+    county: volunteer.county ?? "",
+    phone: volunteer.phone ?? "",
+    churchId: volunteer.churchId ?? "",
+    churchNameAlt: volunteer.churchNameAlt ?? "",
+    adminNotes: volunteer.adminNotes ?? "",
+    backgroundCheckDate: volunteer.backgroundCheckDate
+      ? new Date(volunteer.backgroundCheckDate).toISOString().split("T")[0]
+      : "",
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/churches")
+      .then((r) => r.json())
+      .then(setChurches)
+      .catch(() => {});
+  }, []);
+
+  const set = (field: string, value: string) =>
+    setForm((prev) => ({ ...prev, [field]: value }));
+
+  const submit = async () => {
+    setLoading(true);
+    setError(null);
+
+    const payload: Record<string, string | null> = {
+      name: form.name,
+      email: form.email,
+      role: form.role,
+      status: form.status,
+      county: form.county || null,
+      phone: form.phone || null,
+      churchId: form.churchId || null,
+      churchNameAlt: form.churchId ? null : form.churchNameAlt || null,
+      adminNotes: form.adminNotes || null,
+      backgroundCheckDate: form.backgroundCheckDate || null,
+    };
+
+    const res = await fetch(`/api/admin/users/${volunteer.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const j = await res.json();
+      setError(j.error ?? "Something went wrong");
+      setLoading(false);
+    } else {
+      onSuccess();
+    }
+  };
+
+  const roleOptions = isSuperAdmin
+    ? [
+        { value: "VOLUNTEER", label: "Volunteer" },
+        { value: "TEAM_LEADER", label: "Team Leader" },
+        { value: "COUNTY_COORDINATOR", label: "County Coordinator" },
+        { value: "SUPER_ADMIN", label: "Super Admin" },
+      ]
+    : [
+        { value: "VOLUNTEER", label: "Volunteer" },
+        { value: "TEAM_LEADER", label: "Team Leader" },
+      ];
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6 space-y-4 my-8">
+        <h2 className="text-lg font-semibold">Edit User</h2>
+        <p className="text-sm text-gray-500">{volunteer.name}</p>
+
+        {error && (
+          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+            {error}
+          </p>
+        )}
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1 col-span-2">
+            <Label htmlFor="eu-name">Full Name</Label>
+            <Input
+              id="eu-name"
+              value={form.name}
+              onChange={(e) => set("name", e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-1 col-span-2">
+            <Label htmlFor="eu-email">Email</Label>
+            <Input
+              id="eu-email"
+              type="email"
+              value={form.email}
+              onChange={(e) => set("email", e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="eu-role">Role</Label>
+            <select
+              id="eu-role"
+              value={form.role}
+              onChange={(e) => set("role", e.target.value)}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {roleOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="eu-status">Status</Label>
+            <select
+              id="eu-status"
+              value={form.status}
+              onChange={(e) => set("status", e.target.value)}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="APPROVED">Approved</option>
+              <option value="PENDING">Pending</option>
+              <option value="REJECTED">Rejected</option>
+              <option value="INACTIVE">Inactive</option>
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="eu-county">County</Label>
+            <select
+              id="eu-county"
+              value={form.county}
+              onChange={(e) => set("county", e.target.value)}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">— None —</option>
+              <option value="DOUGLAS">Douglas County</option>
+              <option value="SARPY">Sarpy County</option>
+              <option value="BOTH">Both Counties</option>
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="eu-phone">Phone</Label>
+            <Input
+              id="eu-phone"
+              value={form.phone}
+              onChange={(e) => set("phone", e.target.value)}
+              placeholder="(402) 555-0000"
+            />
+          </div>
+
+          <div className="space-y-1 col-span-2">
+            <Label htmlFor="eu-church">Church</Label>
+            <select
+              id="eu-church"
+              value={form.churchId}
+              onChange={(e) => {
+                set("churchId", e.target.value);
+                if (e.target.value) set("churchNameAlt", "");
+              }}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">— Select from list or type below —</option>
+              {churches.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            {!form.churchId && (
+              <Input
+                value={form.churchNameAlt}
+                onChange={(e) => set("churchNameAlt", e.target.value)}
+                placeholder="Or type church name manually"
+                className="mt-1"
+              />
+            )}
+          </div>
+
+          <div className="space-y-1 col-span-2">
+            <Label htmlFor="eu-bgdate">Background Check Date</Label>
+            <Input
+              id="eu-bgdate"
+              type="date"
+              value={form.backgroundCheckDate}
+              onChange={(e) => set("backgroundCheckDate", e.target.value)}
+            />
+            <p className="text-xs text-gray-400">Expiry auto-set to 2 years from this date.</p>
+          </div>
+
+          <div className="space-y-1 col-span-2">
+            <Label htmlFor="eu-notes">Admin Notes</Label>
+            <Textarea
+              id="eu-notes"
+              value={form.adminNotes}
+              onChange={(e) => set("adminNotes", e.target.value)}
+              rows={2}
+              placeholder="Internal notes (not visible to the user)"
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-3 pt-2">
+          <Button onClick={submit} disabled={loading} className="flex-1">
+            {loading ? "Saving…" : "Save Changes"}
+          </Button>
+          <Button variant="outline" onClick={onClose} disabled={loading} className="flex-1">
+            Cancel
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ResetPasswordModal ───────────────────────────────────────────────────────
+
+interface ResetPasswordModalProps {
+  volunteer: VolunteerWithChurch;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function ResetPasswordModal({ volunteer, onClose, onSuccess }: ResetPasswordModalProps) {
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    setLoading(true);
+    setError(null);
+
+    const res = await fetch(`/api/admin/users/${volunteer.id}/reset-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+
+    if (!res.ok) {
+      const j = await res.json();
+      setError(j.error ?? "Something went wrong");
+      setLoading(false);
+    } else {
+      onSuccess();
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6 space-y-4">
+        <h2 className="text-lg font-semibold">Reset Password</h2>
+        <p className="text-sm text-gray-600">
+          Set a temporary password for <strong>{volunteer.name}</strong>. They should change it on next login.
+        </p>
+
+        {error && (
+          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+            {error}
+          </p>
+        )}
+
+        <div className="space-y-1">
+          <Label htmlFor="rp-password">New Temporary Password</Label>
+          <Input
+            id="rp-password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Min 8 characters"
+          />
+        </div>
+
+        <div className="flex gap-3 pt-2">
+          <Button onClick={submit} disabled={loading} className="flex-1">
+            {loading ? "Saving…" : "Set Password"}
+          </Button>
+          <Button variant="outline" onClick={onClose} disabled={loading} className="flex-1">
+            Cancel
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── DeleteConfirmModal ───────────────────────────────────────────────────────
+
+interface DeleteConfirmModalProps {
+  volunteer: VolunteerWithChurch;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function DeleteConfirmModal({ volunteer, onClose, onSuccess }: DeleteConfirmModalProps) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    setLoading(true);
+    setError(null);
+
+    const res = await fetch(`/api/admin/users/${volunteer.id}`, {
+      method: "DELETE",
+    });
+
+    if (!res.ok) {
+      const j = await res.json();
+      setError(j.error ?? "Something went wrong");
+      setLoading(false);
+    } else {
+      onSuccess();
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6 space-y-4">
+        <h2 className="text-lg font-semibold text-red-700">Delete User</h2>
+        <p className="text-sm text-gray-600">
+          Are you sure you want to permanently delete <strong>{volunteer.name}</strong>? This cannot be undone.
+        </p>
+
+        {error && (
+          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+            {error}
+          </p>
+        )}
+
+        <div className="flex gap-3 pt-2">
+          <Button variant="destructive" onClick={submit} disabled={loading} className="flex-1">
+            {loading ? "Deleting…" : "Delete"}
+          </Button>
+          <Button variant="outline" onClick={onClose} disabled={loading} className="flex-1">
+            Cancel
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── VolunteersTable ──────────────────────────────────────────────────────────
+
+type ModalState =
+  | { type: "approve" | "reject"; volunteer: VolunteerWithChurch }
+  | { type: "edit"; volunteer: VolunteerWithChurch }
+  | { type: "reset-password"; volunteer: VolunteerWithChurch }
+  | { type: "delete"; volunteer: VolunteerWithChurch }
+  | null;
+
 export function VolunteersTable({ volunteers, currentStatus, isSuperAdmin }: Props) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [showAddUser, setShowAddUser] = useState(false);
-  const [modal, setModal] = useState<{
-    volunteer: VolunteerWithChurch;
-    action: "approve" | "reject";
-  } | null>(null);
+  const [modal, setModal] = useState<ModalState>(null);
+  const [statusLoading, setStatusLoading] = useState<string | null>(null);
 
   const filtered = volunteers.filter((v) => {
     if (!search) return true;
@@ -388,17 +768,57 @@ export function VolunteersTable({ volunteers, currentStatus, isSuperAdmin }: Pro
     router.push(`/admin/volunteers?${params.toString()}`);
   };
 
+  const handleStatusToggle = async (v: VolunteerWithChurch, newStatus: "APPROVED" | "INACTIVE") => {
+    setStatusLoading(v.id);
+    const res = await fetch(`/api/admin/users/${v.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus }),
+    });
+    setStatusLoading(null);
+    if (res.ok) {
+      router.refresh();
+    }
+  };
+
+  const handleModalSuccess = () => {
+    setModal(null);
+    router.refresh();
+  };
+
   return (
     <>
-      {modal && (
+      {modal?.type === "approve" || modal?.type === "reject" ? (
         <ActionModal
           volunteer={modal.volunteer}
-          action={modal.action}
+          action={modal.type}
           onClose={() => setModal(null)}
-          onSuccess={() => {
-            setModal(null);
-            router.refresh();
-          }}
+          onSuccess={handleModalSuccess}
+        />
+      ) : null}
+
+      {modal?.type === "edit" && (
+        <EditUserModal
+          volunteer={modal.volunteer}
+          isSuperAdmin={isSuperAdmin}
+          onClose={() => setModal(null)}
+          onSuccess={handleModalSuccess}
+        />
+      )}
+
+      {modal?.type === "reset-password" && (
+        <ResetPasswordModal
+          volunteer={modal.volunteer}
+          onClose={() => setModal(null)}
+          onSuccess={handleModalSuccess}
+        />
+      )}
+
+      {modal?.type === "delete" && (
+        <DeleteConfirmModal
+          volunteer={modal.volunteer}
+          onClose={() => setModal(null)}
+          onSuccess={handleModalSuccess}
         />
       )}
 
@@ -513,34 +933,155 @@ export function VolunteersTable({ volunteers, currentStatus, isSuperAdmin }: Pro
                   </div>
 
                   {/* Actions */}
-                  {currentStatus === "PENDING" && (
-                    <div className="flex gap-2 flex-shrink-0">
-                      <Button
-                        size="sm"
-                        onClick={() => setModal({ volunteer: v, action: "approve" })}
-                        className="gap-1"
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        Approve
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setModal({ volunteer: v, action: "reject" })}
-                        className="gap-1 text-red-600 border-red-300 hover:bg-red-50"
-                      >
-                        <XCircle className="h-3.5 w-3.5" />
-                        Reject
-                      </Button>
-                    </div>
-                  )}
+                  <div className="flex flex-wrap gap-2 flex-shrink-0">
+                    {/* PENDING tab: Approve + Reject + Edit */}
+                    {currentStatus === "PENDING" && (
+                      <>
+                        <Button
+                          size="sm"
+                          onClick={() => setModal({ type: "approve", volunteer: v })}
+                          className="gap-1"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setModal({ type: "reject", volunteer: v })}
+                          className="gap-1 text-red-600 border-red-300 hover:bg-red-50"
+                        >
+                          <XCircle className="h-3.5 w-3.5" />
+                          Reject
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setModal({ type: "edit", volunteer: v })}
+                          className="gap-1"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          Edit
+                        </Button>
+                      </>
+                    )}
 
-                  {currentStatus === "APPROVED" && (
-                    <Badge variant="success">Approved</Badge>
-                  )}
-                  {currentStatus === "REJECTED" && (
-                    <Badge variant="destructive">Rejected</Badge>
-                  )}
+                    {/* APPROVED tab: Edit + Reset Password + Deactivate + Delete */}
+                    {currentStatus === "APPROVED" && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setModal({ type: "edit", volunteer: v })}
+                          className="gap-1"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setModal({ type: "reset-password", volunteer: v })}
+                          className="gap-1"
+                        >
+                          <KeyRound className="h-3.5 w-3.5" />
+                          Reset Password
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleStatusToggle(v, "INACTIVE")}
+                          disabled={statusLoading === v.id}
+                          className="gap-1 text-orange-600 border-orange-300 hover:bg-orange-50"
+                        >
+                          <UserX className="h-3.5 w-3.5" />
+                          {statusLoading === v.id ? "…" : "Deactivate"}
+                        </Button>
+                        {isSuperAdmin && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setModal({ type: "delete", volunteer: v })}
+                            className="gap-1 text-red-600 border-red-300 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Delete
+                          </Button>
+                        )}
+                      </>
+                    )}
+
+                    {/* INACTIVE tab: Edit + Reset Password + Reactivate + Delete */}
+                    {currentStatus === "INACTIVE" && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setModal({ type: "edit", volunteer: v })}
+                          className="gap-1"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setModal({ type: "reset-password", volunteer: v })}
+                          className="gap-1"
+                        >
+                          <KeyRound className="h-3.5 w-3.5" />
+                          Reset Password
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleStatusToggle(v, "APPROVED")}
+                          disabled={statusLoading === v.id}
+                          className="gap-1 text-green-600 border-green-300 hover:bg-green-50"
+                        >
+                          <UserCheck className="h-3.5 w-3.5" />
+                          {statusLoading === v.id ? "…" : "Reactivate"}
+                        </Button>
+                        {isSuperAdmin && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setModal({ type: "delete", volunteer: v })}
+                            className="gap-1 text-red-600 border-red-300 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Delete
+                          </Button>
+                        )}
+                      </>
+                    )}
+
+                    {/* REJECTED tab: Edit + Delete */}
+                    {currentStatus === "REJECTED" && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setModal({ type: "edit", volunteer: v })}
+                          className="gap-1"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          Edit
+                        </Button>
+                        {isSuperAdmin && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setModal({ type: "delete", volunteer: v })}
+                            className="gap-1 text-red-600 border-red-300 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Delete
+                          </Button>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>
