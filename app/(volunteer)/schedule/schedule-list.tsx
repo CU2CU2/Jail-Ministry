@@ -56,7 +56,7 @@ export function ScheduleList({ userCounty }: Props) {
   const [visits, setVisits] = useState<VisitEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [countyFilter, setCountyFilter] = useState<string>(
-    userCounty && userCounty !== "BOTH" ? userCounty : ""
+    userCounty && userCounty !== "BOTH" ? userCounty : "ALL"
   );
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
@@ -69,7 +69,7 @@ export function ScheduleList({ userCounty }: Props) {
   const fetchSchedule = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams();
-    if (countyFilter) params.set("county", countyFilter);
+    if (countyFilter && countyFilter !== "ALL") params.set("county", countyFilter);
     const res = await fetch(`/api/schedule?${params}`);
     if (res.ok) setVisits(await res.json());
     setLoading(false);
@@ -129,7 +129,7 @@ export function ScheduleList({ userCounty }: Props) {
             <SelectValue placeholder="All counties" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All counties</SelectItem>
+            <SelectItem value="ALL">All counties</SelectItem>
             <SelectItem value="DOUGLAS">Douglas County</SelectItem>
             <SelectItem value="SARPY">Sarpy County</SelectItem>
           </SelectContent>
