@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { User, Church } from "@prisma/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { COUNTY_LABELS, formatDate } from "@/lib/utils";
-import { CheckCircle2, XCircle, Phone, Mail, MapPin, Church as ChurchIcon } from "lucide-react";
+import { CheckCircle2, XCircle, Phone, Mail, MapPin, Church as ChurchIcon, UserPlus } from "lucide-react";
 
 type VolunteerWithChurch = User & { church: Church | null };
 
@@ -139,9 +139,235 @@ function ActionModal({ volunteer, action, onClose, onSuccess }: ActionModalProps
   );
 }
 
+interface AddUserModalProps {
+  isSuperAdmin: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function AddUserModal({ isSuperAdmin, onClose, onSuccess }: AddUserModalProps) {
+  const [churches, setChurches] = useState<Church[]>([]);
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+    role: "VOLUNTEER",
+    status: "APPROVED",
+    county: "",
+    phone: "",
+    churchId: "",
+    churchNameAlt: "",
+    adminNotes: "",
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/churches")
+      .then((r) => r.json())
+      .then(setChurches)
+      .catch(() => {});
+  }, []);
+
+  const set = (field: string, value: string) =>
+    setForm((prev) => ({ ...prev, [field]: value }));
+
+  const submit = async () => {
+    setLoading(true);
+    setError(null);
+
+    const payload: Record<string, string> = {
+      name: form.name,
+      email: form.email,
+      password: form.password,
+      role: form.role,
+      status: form.status,
+    };
+    if (form.county) payload.county = form.county;
+    if (form.phone) payload.phone = form.phone;
+    if (form.churchId) payload.churchId = form.churchId;
+    else if (form.churchNameAlt) payload.churchNameAlt = form.churchNameAlt;
+    if (form.adminNotes) payload.adminNotes = form.adminNotes;
+
+    const res = await fetch("/api/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const j = await res.json();
+      setError(j.error ?? "Something went wrong");
+      setLoading(false);
+    } else {
+      onSuccess();
+    }
+  };
+
+  const roleOptions = isSuperAdmin
+    ? [
+        { value: "VOLUNTEER", label: "Volunteer" },
+        { value: "TEAM_LEADER", label: "Team Leader" },
+        { value: "COUNTY_COORDINATOR", label: "County Coordinator" },
+        { value: "SUPER_ADMIN", label: "Super Admin" },
+      ]
+    : [
+        { value: "VOLUNTEER", label: "Volunteer" },
+        { value: "TEAM_LEADER", label: "Team Leader" },
+      ];
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6 space-y-4 my-8">
+        <h2 className="text-lg font-semibold">Add User</h2>
+
+        {error && (
+          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+            {error}
+          </p>
+        )}
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1 col-span-2">
+            <Label htmlFor="au-name">Full Name *</Label>
+            <Input
+              id="au-name"
+              value={form.name}
+              onChange={(e) => set("name", e.target.value)}
+              placeholder="Jane Smith"
+            />
+          </div>
+
+          <div className="space-y-1 col-span-2">
+            <Label htmlFor="au-email">Email *</Label>
+            <Input
+              id="au-email"
+              type="email"
+              value={form.email}
+              onChange={(e) => set("email", e.target.value)}
+              placeholder="jane@example.com"
+            />
+          </div>
+
+          <div className="space-y-1 col-span-2">
+            <Label htmlFor="au-password">Temporary Password *</Label>
+            <Input
+              id="au-password"
+              type="password"
+              value={form.password}
+              onChange={(e) => set("password", e.target.value)}
+              placeholder="Min 8 characters"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="au-role">Role *</Label>
+            <select
+              id="au-role"
+              value={form.role}
+              onChange={(e) => set("role", e.target.value)}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {roleOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="au-status">Status *</Label>
+            <select
+              id="au-status"
+              value={form.status}
+              onChange={(e) => set("status", e.target.value)}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="APPROVED">Approved</option>
+              <option value="PENDING">Pending</option>
+              <option value="INACTIVE">Inactive</option>
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="au-county">County</Label>
+            <select
+              id="au-county"
+              value={form.county}
+              onChange={(e) => set("county", e.target.value)}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">— Select county —</option>
+              <option value="DOUGLAS">Douglas County</option>
+              <option value="SARPY">Sarpy County</option>
+              <option value="BOTH">Both Counties</option>
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="au-phone">Phone</Label>
+            <Input
+              id="au-phone"
+              value={form.phone}
+              onChange={(e) => set("phone", e.target.value)}
+              placeholder="(402) 555-0000"
+            />
+          </div>
+
+          <div className="space-y-1 col-span-2">
+            <Label htmlFor="au-church">Church</Label>
+            <select
+              id="au-church"
+              value={form.churchId}
+              onChange={(e) => {
+                set("churchId", e.target.value);
+                if (e.target.value) set("churchNameAlt", "");
+              }}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">— Select from list or type below —</option>
+              {churches.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            {!form.churchId && (
+              <Input
+                value={form.churchNameAlt}
+                onChange={(e) => set("churchNameAlt", e.target.value)}
+                placeholder="Or type church name manually"
+                className="mt-1"
+              />
+            )}
+          </div>
+
+          <div className="space-y-1 col-span-2">
+            <Label htmlFor="au-notes">Admin Notes</Label>
+            <Textarea
+              id="au-notes"
+              value={form.adminNotes}
+              onChange={(e) => set("adminNotes", e.target.value)}
+              rows={2}
+              placeholder="Internal notes (not visible to the user)"
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-3 pt-2">
+          <Button onClick={submit} disabled={loading} className="flex-1">
+            {loading ? "Creating…" : "Create User"}
+          </Button>
+          <Button variant="outline" onClick={onClose} disabled={loading} className="flex-1">
+            Cancel
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function VolunteersTable({ volunteers, currentStatus, isSuperAdmin }: Props) {
   const router = useRouter();
   const [search, setSearch] = useState("");
+  const [showAddUser, setShowAddUser] = useState(false);
   const [modal, setModal] = useState<{
     volunteer: VolunteerWithChurch;
     action: "approve" | "reject";
@@ -176,6 +402,32 @@ export function VolunteersTable({ volunteers, currentStatus, isSuperAdmin }: Pro
         />
       )}
 
+      {showAddUser && (
+        <AddUserModal
+          isSuperAdmin={isSuperAdmin}
+          onClose={() => setShowAddUser(false)}
+          onSuccess={() => {
+            setShowAddUser(false);
+            router.refresh();
+          }}
+        />
+      )}
+
+      {/* Toolbar */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="max-w-sm flex-1">
+          <Input
+            placeholder="Search by name, email, or phone…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <Button onClick={() => setShowAddUser(true)} className="gap-2 flex-shrink-0">
+          <UserPlus className="h-4 w-4" />
+          Add User
+        </Button>
+      </div>
+
       {/* Status tabs */}
       <div className="flex gap-1 border-b">
         {STATUS_TABS.map((tab) => (
@@ -191,15 +443,6 @@ export function VolunteersTable({ volunteers, currentStatus, isSuperAdmin }: Pro
             {tab.label}
           </button>
         ))}
-      </div>
-
-      {/* Search */}
-      <div className="max-w-sm">
-        <Input
-          placeholder="Search by name, email, or phone…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
       </div>
 
       {/* List */}
