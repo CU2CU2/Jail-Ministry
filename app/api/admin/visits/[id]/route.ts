@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { auditLog } from "@/lib/audit";
+import { sendVisitCancelledEmail } from "@/lib/email";
 
 const ADMIN_ROLES = ["SUPER_ADMIN", "COUNTY_COORDINATOR"];
 
@@ -139,7 +140,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // Soft cancel instead of hard delete
+  // Soft cancel instead of hard delete — fetch signups for notifications first
+  const signedUpUsers = await prisma.visitSignup.findMany({
+    where: { visitId: id, status: { in: ["SIGNED_UP", "ATTENDED"] } },
+    include: { user: { select: { email: true, name: true } } },
+  });
+
   const updated = await prisma.visit.update({
     where: { id },
     data: { status: "CANCELLED" },
@@ -152,6 +158,19 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     targetId: id,
     targetType: "Visit",
   });
+
+  // Notify all signed-up volunteers (fire-and-forget)
+  const visitDate = new Date(visit.date).toLocaleDateString("en-US", {
+    weekday: "long", month: "long", day: "numeric", year: "numeric",
+  });
+  for (const signup of signedUpUsers) {
+    sendVisitCancelledEmail(
+      signup.user.email,
+      signup.user.name,
+      visit.title,
+      visitDate
+    ).catch(console.error);
+  }
 
   return NextResponse.json(updated);
 }

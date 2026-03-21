@@ -77,6 +77,25 @@ export async function sendVerificationEmail(to: string, name: string, token: str
   });
 }
 
+export async function sendVisitCancelledEmail(
+  to: string,
+  name: string,
+  visitTitle: string,
+  visitDate: string
+) {
+  await getResend().emails.send({
+    from: FROM,
+    to,
+    subject: `Visit cancelled: ${visitTitle}`,
+    html: `
+      <h2>Hello, ${escHtml(name)}</h2>
+      <p>The visit <strong>${escHtml(visitTitle)}</strong> scheduled for <strong>${escHtml(visitDate)}</strong> has been <strong>cancelled</strong>.</p>
+      <p>Please check the schedule for other upcoming visits.</p>
+      <p><a href="${process.env.NEXTAUTH_URL}/schedule">View Schedule</a></p>
+    `,
+  });
+}
+
 export async function sendPasswordResetEmail(to: string, name: string, token: string) {
   const url = `${process.env.NEXTAUTH_URL}/reset-password?token=${token}`;
   await getResend().emails.send({

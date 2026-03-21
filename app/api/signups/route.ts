@@ -11,74 +11,69 @@ export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  if (session.user.status !== "APPROVED") {
+    return NextResponse.json({ error: "Your account is not yet approved." }, { status: 403 });
+  }
+
   const userId = session.user.id;
 
   try {
     const body = await req.json();
     const { visitModId } = schema.parse(body);
 
-    const visitMod = await prisma.visitMod.findUnique({
-      where: { id: visitModId },
-      include: {
-        visit: true,
-        signups: { where: { status: { in: ["SIGNED_UP", "ATTENDED"] } } },
-      },
-    });
+    // Run the entire signup inside a transaction to prevent race conditions
+    const result = await prisma.$transaction(async (tx) => {
+      const visitMod = await tx.visitMod.findUnique({
+        where: { id: visitModId },
+        include: {
+          visit: true,
+          signups: { where: { status: { in: ["SIGNED_UP", "ATTENDED"] } } },
+        },
+      });
 
-    if (!visitMod) {
-      return NextResponse.json({ error: "Mod not found." }, { status: 404 });
-    }
-    if (visitMod.visit.status !== "SCHEDULED") {
-      return NextResponse.json({ error: "This visit is no longer scheduled." }, { status: 400 });
-    }
-    if (new Date(visitMod.visit.date) < new Date()) {
-      return NextResponse.json({ error: "Cannot sign up for past visits." }, { status: 400 });
-    }
+      if (!visitMod) throw { status: 404, message: "Mod not found." };
+      if (visitMod.visit.status !== "SCHEDULED")
+        throw { status: 400, message: "This visit is no longer scheduled." };
+      if (new Date(visitMod.visit.date) < new Date())
+        throw { status: 400, message: "Cannot sign up for past visits." };
 
-    // Check capacity
-    const activeCount = visitMod.signups.length;
-    if (activeCount >= visitMod.maxVolunteers) {
-      return NextResponse.json(
-        { error: `${visitMod.visit.title} — this mod is full (${visitMod.maxVolunteers} volunteers max).` },
-        { status: 409 }
-      );
-    }
-
-    // Check the user isn't already signed up for this visit (different mod)
-    const existingSignup = await prisma.visitSignup.findUnique({
-      where: { visitId_userId: { visitId: visitMod.visitId, userId } },
-    });
-    if (existingSignup) {
-      if (existingSignup.status === "CANCELLED") {
-        // Re-activate and move to this mod
-        const updated = await prisma.visitSignup.update({
-          where: { id: existingSignup.id },
-          data: { visitModId, status: "SIGNED_UP", signedUpAt: new Date() },
-          include: { visitMod: { include: { mod: true } }, visit: true },
-        });
-        return NextResponse.json(updated);
+      // Re-check capacity inside transaction (prevents race condition)
+      const activeCount = visitMod.signups.length;
+      if (activeCount >= visitMod.maxVolunteers) {
+        throw {
+          status: 409,
+          message: `This mod is full (${visitMod.maxVolunteers} volunteers max).`,
+        };
       }
-      return NextResponse.json(
-        { error: "You are already signed up for this visit." },
-        { status: 409 }
-      );
-    }
 
-    const signup = await prisma.visitSignup.create({
-      data: {
-        visitId: visitMod.visitId,
-        visitModId,
-        userId,
-        status: "SIGNED_UP",
-      },
-      include: {
-        visitMod: { include: { mod: true } },
-        visit: true,
-      },
+      const existingSignup = await tx.visitSignup.findUnique({
+        where: { visitId_userId: { visitId: visitMod.visitId, userId } },
+      });
+
+      if (existingSignup) {
+        if (existingSignup.status === "CANCELLED") {
+          // Re-activate — capacity already checked above inside this transaction
+          return tx.visitSignup.update({
+            where: { id: existingSignup.id },
+            data: { visitModId, status: "SIGNED_UP", signedUpAt: new Date() },
+            include: { visitMod: { include: { mod: true } }, visit: true },
+          });
+        }
+        throw { status: 409, message: "You are already signed up for this visit." };
+      }
+
+      return tx.visitSignup.create({
+        data: { visitId: visitMod.visitId, visitModId, userId, status: "SIGNED_UP" },
+        include: { visitMod: { include: { mod: true } }, visit: true },
+      });
     });
 
-    return NextResponse.json(signup, { status: 201 });
-  } catch (err) {
+    return NextResponse.json(result, { status: 201 });
+  } catch (err: unknown) {
+    if (err && typeof err === "object" && "status" in err) {
+      const e = err as { status: number; message: string };
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
     if (err instanceof z.ZodError) {
       return NextResponse.json({ error: err.errors[0].message }, { status: 400 });
     }

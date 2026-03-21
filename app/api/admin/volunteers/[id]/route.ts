@@ -41,6 +41,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
 
     if (action === "approve") {
+      if (volunteer.status === "APPROVED") {
+        return NextResponse.json({ error: "This volunteer is already approved." }, { status: 409 });
+      }
       await prisma.user.update({
         where: { id },
         data: {

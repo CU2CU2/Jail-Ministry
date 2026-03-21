@@ -14,23 +14,37 @@ export default async function VolunteersPage({
   const isSuperAdmin = session!.user.role === "SUPER_ADMIN";
   const coordinatorCounty = session!.user.county as UserCounty | null;
 
-  const statusFilter = searchParams.status ?? "PENDING";
-  const countyFilter = searchParams.county;
+  const validStatuses = ["PENDING", "APPROVED", "REJECTED", "INACTIVE"];
+  const statusFilter = validStatuses.includes(searchParams.status ?? "") ? searchParams.status! : "PENDING";
+
+  // Coordinators cannot view counties outside their own via URL param
+  const validCounties = ["DOUGLAS", "SARPY", "BOTH"];
+  const requestedCounty = searchParams.county;
+  const countyFilter =
+    requestedCounty && validCounties.includes(requestedCounty)
+      ? !isSuperAdmin && coordinatorCounty && coordinatorCounty !== "BOTH" && requestedCounty !== coordinatorCounty && requestedCounty !== "BOTH"
+        ? null // block out-of-county filter for coordinators
+        : requestedCounty
+      : null;
+
   const query = searchParams.q ?? "";
+
+  // Super admins see all roles; coordinators only see VOLUNTEER and TEAM_LEADER
+  const roleFilter = isSuperAdmin
+    ? undefined
+    : { in: ["VOLUNTEER", "TEAM_LEADER"] as const };
+
+  // Coordinators are restricted to their county; super admins see all unless filtered
+  const countyRestriction =
+    !isSuperAdmin && coordinatorCounty && coordinatorCounty !== "BOTH"
+      ? { OR: [{ county: coordinatorCounty }, { county: "BOTH" as UserCounty }] }
+      : {};
 
   const volunteers = await prisma.user.findMany({
     where: {
-      role: { in: ["VOLUNTEER", "TEAM_LEADER"] },
+      ...(roleFilter ? { role: roleFilter } : {}),
       status: statusFilter as never,
-      // County coordinators only see their own county volunteers
-      ...(!isSuperAdmin && coordinatorCounty && coordinatorCounty !== "BOTH"
-        ? {
-            OR: [
-              { county: coordinatorCounty },
-              { county: "BOTH" },
-            ],
-          }
-        : {}),
+      ...countyRestriction,
       ...(countyFilter ? { county: countyFilter as UserCounty } : {}),
       ...(query
         ? {
@@ -48,11 +62,9 @@ export default async function VolunteersPage({
 
   const pendingCount = await prisma.user.count({
     where: {
-      role: { in: ["VOLUNTEER", "TEAM_LEADER"] },
+      ...(roleFilter ? { role: roleFilter } : {}),
       status: "PENDING",
-      ...(!isSuperAdmin && coordinatorCounty && coordinatorCounty !== "BOTH"
-        ? { OR: [{ county: coordinatorCounty }, { county: "BOTH" }] }
-        : {}),
+      ...countyRestriction,
     },
   });
 

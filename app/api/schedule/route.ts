@@ -6,10 +6,21 @@ export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Only APPROVED users can view the schedule
+  if (session.user.status !== "APPROVED") {
+    return NextResponse.json({ error: "Your account is not yet approved." }, { status: 403 });
+  }
+
   const { searchParams } = new URL(req.url);
   const county = searchParams.get("county");
   const userId = session.user.id;
   const userCounty = session.user.county;
+
+  // Validate that a requested county filter is a real county
+  const validCounties = ["DOUGLAS", "SARPY"];
+  if (county && !validCounties.includes(county)) {
+    return NextResponse.json({ error: "Invalid county." }, { status: 400 });
+  }
 
   const visits = await prisma.visit.findMany({
     where: {
@@ -19,7 +30,9 @@ export async function GET(req: Request) {
         ? { county: county as "DOUGLAS" | "SARPY" }
         : userCounty && userCounty !== "BOTH"
         ? { county: userCounty }
-        : {}),
+        : userCounty === "BOTH"
+        ? {}
+        : { id: "no-match" }), // null county sees nothing
     },
     include: {
       visitMods: {

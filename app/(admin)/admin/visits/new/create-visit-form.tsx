@@ -22,7 +22,11 @@ import {
 const schema = z.object({
   title: z.string().min(1, "Title is required"),
   county: z.enum(["DOUGLAS", "SARPY"]),
-  date: z.string().min(1, "Date is required"),
+  date: z.string().min(1, "Date is required").refine((d) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return new Date(d) >= today;
+  }, "Date cannot be in the past"),
   startTime: z.string().min(1, "Start time is required"),
   endTime: z.string().min(1, "End time is required"),
   location: z.string().min(1, "Location is required"),
